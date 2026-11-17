@@ -15,6 +15,10 @@ if command -v brew >/dev/null 2>&1; then
 fi
 
 trap 'echo "Deploy aborted - a previous step failed, nothing was deployed." >&2' ERR
+# Ctrl+C must stop the deploy. `firebase emulators:exec` catches SIGINT,
+# shuts the emulators down cleanly and exits 0, so without this bash treats
+# the e2e step as passed and goes on to build and deploy (2026-11-17).
+trap 'echo "Deploy cancelled (Ctrl+C) - stopping here." >&2; exit 130' INT
 
 echo "Running Network production hosting deploy"
 echo "Firebase project context: taliferrotech"
