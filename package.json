@@ -2,6 +2,7 @@
   "name": "network",
   "version": "2026.11.18-build.1",
   "scripts": {
+    "auth:ui": "npx google-artifactregistry-auth",
     "ng": "ng",
     "start": "ng serve",
     "prebuild": "node scripts/update-build-version.mjs",
@@ -33,7 +34,7 @@
     "@angular/service-worker": "^19.2.25",
     "@angular/ssr": "^19.2.27",
     "@fortawesome/fontawesome-free": "^7.3.1",
-    "@taliferro/ui": "file:../../taliferro-ui",
+    "@taliferro/ui": "^1.0.0",
     "bootstrap": "^5.3.8",
     "chart.js": "^4.5.1",
     "express": "^4.18.2",
