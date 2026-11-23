@@ -1,4 +1,5 @@
-import { Injectable } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { Injectable, inject } from '@angular/core';
 import {
   addDoc,
   collection,
@@ -15,7 +16,8 @@ import {
   writeBatch,
   getFirestore,
 } from 'firebase/firestore';
-import { Observable } from 'rxjs';
+import { Observable, firstValueFrom } from 'rxjs';
+import { environment } from '../../environments/environment';
 
 import { Contact } from '../models/contact.model';
 
@@ -31,6 +33,8 @@ import { Contact } from '../models/contact.model';
  */
 @Injectable( { providedIn: 'root' } )
 export class NetworkDataService {
+  private readonly http = inject( HttpClient );
+
   private get firestore () {
     return getFirestore();
   }
@@ -145,20 +149,23 @@ export class NetworkDataService {
       const chunk = withIds.slice( i, i + 200 );
       const batch = writeBatch( this.firestore );
 
-      chunk.forEach( ( contact ) => {
-        batch.set( doc( archive, contact.id ), stripUndefined( {
-          ...contact,
-          id: contact.id,
-          statusBeforeDelete: contact.status ?? null,
-          status: 'Deleted',
-          deletedAt,
-          deletedFrom: 'network',
-          deletedReason: reason,
-        } ) );
-        batch.delete( doc( live, contact.id ) );
-      } );
-
       try {
+        // Archive the whole stored contact: callers may hold only a list row
+        // (getContactRows), and Lead Vault and re-import checks read the archive.
+        const stored = await Promise.all( chunk.map( ( contact ) => getDoc( doc( live, contact.id ) ) ) );
+        chunk.forEach( ( contact, index ) => {
+          const full = stored[index].exists() ? ( stored[index].data() as Contact ) : contact;
+          batch.set( doc( archive, contact.id ), stripUndefined( {
+            ...full,
+            id: contact.id,
+            statusBeforeDelete: full.status ?? null,
+            status: 'Deleted',
+            deletedAt,
+            deletedFrom: 'network',
+            deletedReason: reason,
+          } ) );
+          batch.delete( doc( live, contact.id ) );
+        } );
         await batch.commit();
         deleted.push( ...chunk.map( ( contact ) => contact.id ) );
       } catch {
@@ -170,15 +177,18 @@ export class NetworkDataService {
   }
 
   /**
-   * Mirrors DataService.getCollectionData('CONTACTS', ...) - the whole
-   * tenant's contact collection, no pagination. list.component.ts's real
-   * loadData() does the exact same full-collection fetch (its "pagination"
-   * is really just project-based access filtering, which this doesn't
-   * carry - see ListComponent's own scoping note).
+   * Every contact in the signed-in user's workspace as a slim list row - id,
+   * name, company name, profession, stage, email/phone and the email-check
+   * flags (todd-backend GET /network/contact-rows). Contacts, Pipeline and
+   * Progress use this instead of reading the collection from Firestore: the
+   * web SDK can't read only some fields, a full contact averages ~25 KB,
+   * and a 6,000-contact workspace (~150 MB) froze those pages. A row is not
+   * a full contact - open the contact (getContact) to edit or archive it.
    */
-  async getAllContacts ( tenantId: string ): Promise<Contact[]> {
-    const snap = await getDocs( this.contactsRef( tenantId ) );
-    return snap.docs.map( ( d ) => ( { ...( d.data() as any ), id: d.id } ) as Contact );
+  async getContactRows (): Promise<Contact[]> {
+    const response = await firstValueFrom( this.http.get<{ data?: { contacts?: Contact[] } }>(
+      `${environment.backendURL}/network/contact-rows` ) );
+    return response?.data?.contacts || [];
   }
 
   /**

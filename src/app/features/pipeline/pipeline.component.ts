@@ -17,9 +17,23 @@ import { StatusFlowComponent } from '../../shared/status-flow/status-flow.compon
 import { ChoiceFieldComponent, ChoiceOption } from '../../shared/choice-field/choice-field.component';
 import { EmptyStateComponent } from '../../shared/empty-state/empty-state.component';
 
+/** A contact's card, worked out once rather than on every redraw. */
+interface PipelineCard {
+  contact: Contact;
+  id: string;
+  name: string;
+  initials: string;
+  company: string;
+}
+
 interface PipelineStage {
   name: string;
+  tint: string;
   contacts: Contact[];
+  cards: PipelineCard[];
+  /** The first `limit` cards - what's drawn; a lane can hold thousands. */
+  shown: PipelineCard[];
+  limit: number;
 }
 
 interface PipelineHealthMeter {
@@ -27,7 +41,14 @@ interface PipelineHealthMeter {
   value: number;
   tone: ArcGaugeTone;
   detail: string;
+  /** Precomputed for the template: ring colour, ring fill, and the % text. */
+  tier: string;
+  ring: number;
+  pct: string;
 }
+
+/** Cards drawn per lane at a time; "Show more" adds another page. */
+const LANE_PAGE_SIZE = 50;
 
 const EARLY_STAGES = ['Lead Generation', 'Qualification'];
 const LATE_STAGES = ['Negotiation', 'Closing', 'Post-Sale', 'Closed Won'];
@@ -77,6 +98,8 @@ const LATE_STAGES = ['Negotiation', 'Closing', 'Post-Sale', 'Closed Won'];
   styleUrl: './pipeline.component.css',
 } )
 export class PipelineComponent implements OnInit, OnDestroy {
+  readonly trackCard = ( _index: number, card: PipelineCard ): string => card.id;
+
   readonly stageNames: string[] = [
     'Lead Generation',
     'Qualification',
@@ -94,6 +117,8 @@ export class PipelineComponent implements OnInit, OnDestroy {
   errorMessage = '';
   stages: PipelineStage[] = [];
   pipelineContactCount = 0;
+  /** Phone stage chooser: each lane with its count. */
+  stageChoiceOptions: ChoiceOption[] = [];
   healthMeters: PipelineHealthMeter[] = [];
   momentumScore = 0;
   closedWonCount = 0;
@@ -130,7 +155,7 @@ export class PipelineComponent implements OnInit, OnDestroy {
     this.tenantId = await this.authService.resolveTenantId( userId );
 
     try {
-      this.allContacts = await this.dataService.getAllContacts( this.tenantId );
+      this.allContacts = await this.dataService.getContactRows();
       this.buildStages( this.allContacts );
       this.buildHealthMeters();
       this.publishAssistantContext();
@@ -163,18 +188,33 @@ export class PipelineComponent implements OnInit, OnDestroy {
     const validContacts = contacts.filter( ( contact ) => !!contact.status?.trim() );
     this.pipelineContactCount = validContacts.length;
 
-    this.stages = this.stageNames.map( ( name ) => ( {
-      name,
-      contacts: validContacts.filter( ( contact ) => contact.status === name ),
-    } ) );
+    const previous = new Map( this.stages.map( ( stage ) => [stage.name, stage.limit] ) );
+    this.stages = this.stageNames.map( ( name ) => {
+      const inStage = validContacts.filter( ( contact ) => contact.status === name );
+      const cards = inStage.map( ( contact ) => this.toCard( contact ) );
+      const limit = previous.get( name ) || LANE_PAGE_SIZE;
+      return { name, tint: stageTint( name ), contacts: inStage, cards, shown: cards.slice( 0, limit ), limit };
+    } );
+    this.stageChoiceOptions = this.stages.map( ( stage ) => ( { value: stage.name, label: `${stage.name} (${stage.contacts.length})` } ) );
     if ( !this.mobileStage ) {
       this.mobileStage = this.stages.find( ( stage ) => stage.contacts.length > 0 )?.name || this.stageNames[0];
     }
   }
 
-  /** Phone stage chooser: each lane with its count. */
-  get stageChoiceOptions (): ChoiceOption[] {
-    return this.stages.map( ( stage ) => ( { value: stage.name, label: `${stage.name} (${stage.contacts.length})` } ) );
+  private toCard ( contact: Contact ): PipelineCard {
+    return {
+      contact,
+      id: contact.id || '',
+      name: this.displayName( contact ),
+      initials: this.initials( contact ),
+      company: contact.company?.name || 'No company listed',
+    };
+  }
+
+  /** Draws another page of a lane's cards. */
+  showMore ( stage: PipelineStage ): void {
+    stage.limit += LANE_PAGE_SIZE;
+    stage.shown = stage.cards.slice( 0, stage.limit );
   }
 
   toggleMove ( event: Event, contact: Contact ): void {
@@ -195,6 +235,7 @@ export class PipelineComponent implements OnInit, OnDestroy {
     // scroll it into view (lanes past the edge are off-screen otherwise).
     this.mobileStage = status;
     this.refreshBoard();
+    this.ensureDrawn( status, id );
     setTimeout( () => this.revealCard( id ), 50 );
     try {
       await this.dataService.updateContact( this.tenantId, id, { status } );
@@ -205,6 +246,14 @@ export class PipelineComponent implements OnInit, OnDestroy {
       this.refreshBoard();
       this.moveErrorFor = id;
     }
+  }
+
+  /** Makes sure a card is within its lane's drawn page, so it can be scrolled to. */
+  private ensureDrawn ( stageName: string, id: string ): void {
+    const stage = this.stages.find( ( item ) => item.name === stageName );
+    if ( !stage || stage.shown.some( ( card ) => card.id === id ) ) return;
+    const card = stage.cards.find( ( item ) => item.id === id );
+    if ( card ) stage.shown = [card, ...stage.shown];
   }
 
   /** Scroll the board sideways (and the page if needed) so a card is in view. */
@@ -249,7 +298,7 @@ export class PipelineComponent implements OnInit, OnDestroy {
 
     this.momentumScore = lateStagePct;
 
-    this.healthMeters = [
+    const meters: Array<Omit<PipelineHealthMeter, 'tier' | 'ring' | 'pct'>> = [
       {
         label: 'Late-stage momentum',
         value: lateStagePct,
@@ -269,26 +318,30 @@ export class PipelineComponent implements OnInit, OnDestroy {
         detail: `${earlyStageCount} contact${earlyStageCount === 1 ? '' : 's'} in Lead Generation or Qualification`,
       },
     ];
+    this.healthMeters = meters.map( ( meter ) => ( {
+      ...meter,
+      tier: this.ringTier( meter ),
+      ring: meter.value > 0 && meter.value < 2 ? 2 : meter.value,
+      pct: this.formatPct( meter.value ),
+    } ) );
   }
 
-  displayName ( contact: Contact ): string {
+  private displayName ( contact: Contact ): string {
     const name = `${contact.firstName || ''} ${contact.lastName || ''}`.trim();
     return name || contact.company?.name || 'Unnamed contact';
   }
 
-  readonly tint = stageTint;
-
   /** Ring colour: TODD's info meters are blue; the rest follow green/amber/red. */
-  ringTier ( meter: PipelineHealthMeter ): string {
+  private ringTier ( meter: { tone: ArcGaugeTone; value: number } ): string {
     if ( meter.tone === 'info' ) return 'blue';
     return meter.value >= 70 ? 'high' : meter.value >= 40 ? 'mid' : 'low';
   }
 
-  formatPct ( value: number ): string {
+  private formatPct ( value: number ): string {
     return value > 0 && value < 1 ? value.toFixed( 2 ) : String( Math.round( value ) );
   }
 
-  initials ( contact: Contact ): string {
+  private initials ( contact: Contact ): string {
     const first = ( contact.firstName || '' ).trim();
     const last = ( contact.lastName || '' ).trim();
     const combined = `${first.charAt( 0 )}${last.charAt( 0 )}`.toUpperCase();

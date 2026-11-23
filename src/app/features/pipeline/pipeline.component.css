@@ -60,6 +60,7 @@
 }
 
 .pl-cards { display: grid; gap: 8px; }
+.pl-more { justify-self: stretch; font-size: 13px; }
 .pl-card-wrap { display: grid; gap: 6px; }
 
 .pl-card {

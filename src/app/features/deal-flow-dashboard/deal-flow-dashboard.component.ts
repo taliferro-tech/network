@@ -40,6 +40,9 @@ interface PipelineStatusStep {
   generatedItems: Array<{ label: string; detail: string; status: string; tone: string }>;
 }
 
+/** Contacts drawn per lane at a time in Lane View. */
+const LANE_PAGE_SIZE = 50;
+
 @Component( {
   selector: 'app-deal-flow-dashboard',
   standalone: true,
@@ -69,6 +72,9 @@ export class DealFlowDashboardComponent implements OnInit, OnDestroy {
   customerCount = 0;
   contactsByStage: Record<string, Contact[]> = {};
   laneContactsByStage: Record<string, Array<{ contact: Contact; name: string }>> = {};
+  /** What Lane View draws per stage - the first page; a stage can hold thousands. */
+  laneShownByStage: Record<string, Array<{ contact: Contact; name: string }>> = {};
+  private laneLimits: Record<string, number> = {};
   priorityStages: Array<{ label: string; description: string; count: number; accent: string; icon: string }> = [];
   private tenantId = '';
   todayMomentumLoaded = false;
@@ -105,7 +111,7 @@ export class DealFlowDashboardComponent implements OnInit, OnDestroy {
 
     this.tenantId = await this.authService.resolveTenantId( userId );
     try {
-      this.contacts = await this.dataService.getAllContacts( this.tenantId );
+      this.contacts = await this.dataService.getContactRows();
       this.updateStageCounts();
       this.buildPipelineStatusSteps();
       void this.loadSourceMetrics( userId );
@@ -118,6 +124,12 @@ export class DealFlowDashboardComponent implements OnInit, OnDestroy {
   }
 
   selectTab ( tab: DashboardTab ): void { this.selectedTab = tab; }
+
+  /** Lane View: draws another page of a stage's contacts. */
+  showMoreLane ( label: string ): void {
+    this.laneLimits[label] = ( this.laneLimits[label] || LANE_PAGE_SIZE ) + LANE_PAGE_SIZE;
+    this.laneShownByStage[label] = ( this.laneContactsByStage[label] || [] ).slice( 0, this.laneLimits[label] );
+  }
 
   /** Stage and priority tints (design_handoff_music_leadvault_network 15g). */
   readonly stageTints: Record<string, string> = {
@@ -188,6 +200,7 @@ export class DealFlowDashboardComponent implements OnInit, OnDestroy {
     this.stages.forEach( stage => {
       this.contactsByStage[stage.label] = this.contacts.filter( contact => stage.statusNames.map( value => value.toLowerCase() ).includes( String( contact.status || '' ).trim().toLowerCase() ) );
       this.laneContactsByStage[stage.label] = this.contactsByStage[stage.label].map( contact => ( { contact, name: this.displayName( contact ) } ) );
+      this.laneShownByStage[stage.label] = this.laneContactsByStage[stage.label].slice( 0, this.laneLimits[stage.label] || LANE_PAGE_SIZE );
     } );
     this.priorityStages = [
       { label: 'High Intent', description: 'Strong buying signals detected', count: this.countForStatuses( ['Opportunity', 'Negotiation', 'Proposal'] ), accent: 'red', icon: 'fire' },

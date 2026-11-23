@@ -12,8 +12,8 @@
     </div>
     <div class="pl-chips" *ngIf="isSignedIn && pipelineContactCount > 0">
       <div class="pl-chip" *ngFor="let meter of healthMeters" [title]="meter.detail">
-        <span class="nw-ring" [style.--v]="meter.value > 0 && meter.value < 2 ? 2 : meter.value" [attr.data-tier]="ringTier(meter)"><span></span></span>
-        <div><strong>{{ formatPct(meter.value) }}%</strong><small>{{ meter.label }}</small></div>
+        <span class="nw-ring" [style.--v]="meter.ring" [attr.data-tier]="meter.tier"><span></span></span>
+        <div><strong>{{ meter.pct }}%</strong><small>{{ meter.label }}</small></div>
       </div>
     </div>
   </header>
@@ -35,28 +35,31 @@
       </div>
 
       <div class="pl-board">
-        <section class="pl-lane" *ngFor="let stage of stages" [class.is-active]="stage.name === mobileStage" [attr.data-tint]="tint(stage.name)" [attr.aria-label]="stage.name">
+        <section class="pl-lane" *ngFor="let stage of stages" [class.is-active]="stage.name === mobileStage" [attr.data-tint]="stage.tint" [attr.aria-label]="stage.name">
           <header>
             <h2>{{ stage.name }}</h2>
             <span class="pl-count">{{ stage.contacts.length }}</span>
           </header>
           <div class="pl-cards">
-            <div class="pl-card-wrap" *ngFor="let contact of stage.contacts" [attr.data-contact-id]="contact.id" data-cy="pipeline-card">
+            <div class="pl-card-wrap" *ngFor="let card of stage.shown; trackBy: trackCard" [attr.data-contact-id]="card.id" data-cy="pipeline-card">
               <div class="pl-card">
-                <button type="button" class="pl-open" (click)="openContact(contact)">
-                  <span class="nw-avatar" [attr.data-tint]="tint(stage.name)">{{ initials(contact) }}</span>
-                  <span class="pl-who"><strong>{{ displayName(contact) }}</strong><small>{{ contact.company?.name || 'No company listed' }}</small></span>
+                <button type="button" class="pl-open" (click)="openContact(card.contact)">
+                  <span class="nw-avatar" [attr.data-tint]="stage.tint">{{ card.initials }}</span>
+                  <span class="pl-who"><strong>{{ card.name }}</strong><small>{{ card.company }}</small></span>
                 </button>
-                <button type="button" class="pl-move" [attr.aria-expanded]="movePickerFor === contact.id" [attr.aria-label]="'Move ' + displayName(contact) + ' to another stage'" (click)="toggleMove($event, contact)" data-cy="pipeline-move">
-                  Move <svg class="nw-icon" viewBox="0 0 24 24" aria-hidden="true" [class.is-open]="movePickerFor === contact.id"><path d="m9 18 6-6-6-6"/></svg>
+                <button type="button" class="pl-move" [attr.aria-expanded]="movePickerFor === card.id" [attr.aria-label]="'Move ' + card.name + ' to another stage'" (click)="toggleMove($event, card.contact)" data-cy="pipeline-move">
+                  Move <svg class="nw-icon" viewBox="0 0 24 24" aria-hidden="true" [class.is-open]="movePickerFor === card.id"><path d="m9 18 6-6-6-6"/></svg>
                 </button>
               </div>
-              <div class="pl-picker" *ngIf="movePickerFor === contact.id" data-cy="pipeline-move-picker">
-                <app-status-flow mode="input" [listOnly]="true" [currentStatus]="contact.status || ''" (statusChange)="moveContact(contact, $event)"></app-status-flow>
+              <div class="pl-picker" *ngIf="movePickerFor === card.id" data-cy="pipeline-move-picker">
+                <app-status-flow mode="input" [listOnly]="true" [currentStatus]="card.contact.status || ''" (statusChange)="moveContact(card.contact, $event)"></app-status-flow>
               </div>
-              <span class="pl-note" *ngIf="movedFor === contact.id" role="status">Moved</span>
-              <span class="pl-note pl-note--error" *ngIf="moveErrorFor === contact.id" role="alert">Couldn't move</span>
+              <span class="pl-note" *ngIf="movedFor === card.id" role="status">Moved</span>
+              <span class="pl-note pl-note--error" *ngIf="moveErrorFor === card.id" role="alert">Couldn't move</span>
             </div>
+            <button type="button" class="nw-btn pl-more" *ngIf="stage.shown.length < stage.cards.length" (click)="showMore(stage)" data-cy="pipeline-show-more">
+              Show more ({{ stage.cards.length - stage.shown.length | number }} left)
+            </button>
             <p class="pl-none" *ngIf="stage.contacts.length === 0">No contacts</p>
           </div>
         </section>

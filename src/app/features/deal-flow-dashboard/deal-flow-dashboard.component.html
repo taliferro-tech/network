@@ -158,9 +158,11 @@
       <div class="pg-lane-grid">
         <article class="pg-lane" *ngFor="let stage of stages" [attr.data-tint]="stageTints[stage.label]">
           <header><h3>{{ stage.label }}</h3><span class="pg-count">{{ stage.count | number }}</span></header>
-          <button type="button" *ngFor="let item of laneContactsByStage[stage.label]" (click)="openContact(item.contact)">
+          <button type="button" *ngFor="let item of laneShownByStage[stage.label]" (click)="openContact(item.contact)">
             <strong>{{ item.name }}</strong><small>{{ item.contact.company?.name || 'No company listed' }}</small>
           </button>
+          <button type="button" class="nw-btn pg-lane__more" *ngIf="(laneShownByStage[stage.label]?.length || 0) < (laneContactsByStage[stage.label]?.length || 0)"
+                  (click)="showMoreLane(stage.label)" data-cy="lane-show-more">Show more</button>
           <p *ngIf="stage.count === 0">No contacts here yet.</p>
         </article>
       </div>
