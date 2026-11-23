@@ -1,5 +1,6 @@
 // You can add custom commands or global hooks here
 import './commands';
+import './contact-rows';
 
 // Prevent AUT-level uncaught exceptions (e.g. Firebase init, zone.js async errors)
 // from failing tests.
