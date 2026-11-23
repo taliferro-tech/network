@@ -77,6 +77,20 @@ async function contactRows ( authorization: string ): Promise<Record<string, unk
   return rows;
 }
 
+/** The emulator read can drop while a spec reloads the page; try it a few times before failing the test. */
+async function withRetry<T> ( read: () => Promise<T>, tries = 4 ): Promise<T> {
+  let lastError: unknown;
+  for ( let attempt = 0; attempt < tries; attempt++ ) {
+    try {
+      return await read();
+    } catch ( error ) {
+      lastError = error;
+      await new Promise( ( resolve ) => setTimeout( resolve, 250 * ( attempt + 1 ) ) );
+    }
+  }
+  throw lastError;
+}
+
 beforeEach( () => {
   cy.intercept( 'GET', '**/network/contact-rows', ( req ) => {
     const authorization = String( req.headers['authorization'] || '' );
@@ -84,7 +98,7 @@ beforeEach( () => {
       req.reply( { statusCode: 401, body: { error: 'Missing bearer token.' } } );
       return;
     }
-    return contactRows( authorization ).then( ( contacts ) => {
+    return withRetry( () => contactRows( authorization ) ).then( ( contacts ) => {
       req.reply( { statusCode: 200, body: { success: true, data: { contacts } } } );
     } );
   } );
