@@ -1,5 +1,5 @@
 @if (!isEmbedded) {
-  <app-header [isAdmin]="(isAdmin$ | async) ?? false" [isLoggedIn]="(isLoggedIn$ | async) ?? false" [userName]="(userName$ | async) ?? ''" [userEmail]="(userEmail$ | async) ?? ''" (signOut)="signOut()" />
+  <app-header [isAdmin]="(isAdmin$ | async) ?? false" [isLoggedIn]="(isLoggedIn$ | async) ?? false" [userName]="(userName$ | async) ?? ''" [userEmail]="(userEmail$ | async) ?? ''" [userId]="(userId$ | async) ?? ''" (signOut)="signOut()" />
 }
 <router-outlet></router-outlet>
 <app-network-assistant-launcher *ngIf="!isEmbedded"></app-network-assistant-launcher>
