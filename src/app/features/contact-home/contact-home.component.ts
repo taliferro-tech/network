@@ -18,6 +18,7 @@ import { IMPORT_SOURCES, ImportSource, openImportSource } from '../../models/imp
 import { NetworkOnboarding, NetworkOnboardingService, OnboardingStep } from '../../services/network-onboarding.service';
 import { GoingQuiet, GoingQuietItem, NetworkGoingQuietService } from '../../services/network-going-quiet.service';
 import { OutreachLinkService } from '../../services/outreach-link.service';
+import { idTokenHeader } from '../../services/id-token-header';
 
 interface NetworkLimitState {
   currentCount: number;
@@ -656,7 +657,7 @@ export class ContactHomeComponent implements OnInit, AfterViewInit, OnDestroy {
 
     try {
       const response = await fetch( `${environment.backendURL}/network/limits?tenantId=${encodeURIComponent( authContext.tenantId )}`, {
-        headers: this.buildAuthHeaders( authContext )
+        headers: await this.buildAuthHeaders( authContext )
       } );
       const result = await response.json().catch( () => ( {} ) );
 
@@ -702,7 +703,7 @@ export class ContactHomeComponent implements OnInit, AfterViewInit, OnDestroy {
 
     try {
       const response = await fetch( `${environment.backendURL}/network/dashboard-counts?tenantId=${encodeURIComponent( authContext.tenantId )}`, {
-        headers: this.buildAuthHeaders( authContext )
+        headers: await this.buildAuthHeaders( authContext )
       } );
       const result = await response.json().catch( () => ( {} ) );
 
@@ -731,10 +732,11 @@ export class ContactHomeComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
-  private buildAuthHeaders ( authContext: NetworkAuthContext ): HeadersInit {
+  private async buildAuthHeaders ( authContext: NetworkAuthContext ): Promise<HeadersInit> {
     const headers: Record<string, string> = {
       'x-tenant-id': authContext.tenantId,
-      'x-user-id': authContext.userId
+      'x-user-id': authContext.userId,
+      ...( await idTokenHeader() ),
     };
 
     if ( authContext.userEmail ) {

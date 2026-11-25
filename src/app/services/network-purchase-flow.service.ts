@@ -3,6 +3,7 @@ import { Router } from '@angular/router';
 import { environment } from '../../environments/environment';
 import { NetworkEntitlementService } from './network-entitlement.service';
 import { ProductPurchaseFlowConfig } from './purchase-flow.config';
+import { idTokenHeader } from './id-token-header';
 
 export interface ProductCheckoutRequest {
   tenantId: string;
@@ -39,7 +40,7 @@ export class NetworkPurchaseFlowService {
   ): Promise<string> {
     const response = await fetch( `${environment.backendURL}${config.checkoutEndpoint}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...( await idTokenHeader() ) },
       ...( config.checkoutCredentials ? { credentials: config.checkoutCredentials } : {} ),
       body: JSON.stringify( {
         tenantId: payload.tenantId,
@@ -70,7 +71,8 @@ export class NetworkPurchaseFlowService {
     const response = await fetch( `${environment.backendURL}${config.confirmEndpoint}`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        ...( await idTokenHeader() ),
       },
       ...( config.confirmCredentials ? { credentials: config.confirmCredentials } : {} ),
       body: JSON.stringify( { sessionId } )

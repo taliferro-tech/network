@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { environment } from '../../environments/environment';
 import { NetworkAuthService } from './network-auth.service';
+import { idTokenHeader } from './id-token-header';
 
 /** Ported from services/network-contact-pack.service.ts - logic unchanged, swapped to NetworkAuthService. */
 @Injectable( { providedIn: 'root' } )
@@ -27,6 +28,7 @@ export class NetworkContactPackService {
         'Content-Type': 'application/json',
         'x-tenant-id': tenantId,
         'x-user-id': tenantId,
+        ...( await idTokenHeader() ),
       },
       body: JSON.stringify( { tenantId } ),
     } );

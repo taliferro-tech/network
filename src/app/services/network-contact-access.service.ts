@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { environment } from '../../environments/environment';
 import { NetworkAuthService } from './network-auth.service';
+import { idTokenHeader } from './id-token-header';
 
 export interface ContactAccessState {
   isLoggedIn: boolean;
@@ -74,6 +75,7 @@ export class NetworkContactAccessService {
           'x-tenant-id': tenantId,
           'x-user-id': userId,
           ...( userEmail ? { 'x-user-email': userEmail } : {} ),
+          ...( await idTokenHeader() ),
         },
         body: JSON.stringify( { tenantId } ),
       } );
