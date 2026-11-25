@@ -17,17 +17,20 @@ export class NetworkContactPackService {
   }
 
   async startCheckout (): Promise<void> {
-    const tenantId = this.authService.getCurrentUserIdSync();
-    if ( !tenantId ) {
+    const userId = this.authService.getCurrentUserIdSync();
+    if ( !userId ) {
       throw new Error( 'Please sign in before adding another contact pack.' );
     }
+    // The pack belongs to the workspace (users/{uid}.companyId for a team
+    // member), the same tenant the entitlement check reads - not the uid.
+    const tenantId = ( await this.authService.resolveTenantId( userId ).catch( () => '' ) ) || userId;
 
     const response = await fetch( `${environment.backendURL}/network/contact-pack/checkout`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-tenant-id': tenantId,
-        'x-user-id': tenantId,
+        'x-user-id': userId,
         ...( await idTokenHeader() ),
       },
       body: JSON.stringify( { tenantId } ),
